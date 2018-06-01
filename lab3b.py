@@ -7,6 +7,33 @@ ID: 704827423,204785152
 
 import sys
 
+
+class BlockAudit:
+    def __init__(self, max_block, fs_summary):
+        self.max_block = max_block
+        # Block Structure: block_num, block_level, inode_num, offset
+        self.blocks = {}
+
+    def parse_blocks(self):
+        for entry in fs_summary:
+            tokenized = entry.split(',')
+            if tokenized[0] == 'INDIRECT':
+                self.blocks['block_num'] = tokenized[5]
+                self.blocks['block_level'] = tokenized[2]
+                self.blocks['inode_num'] = tokenized[1]
+                self.blocks['offset'] = tokenized[3]
+            if tokenized[0] == 'INODE':
+                pass
+
+
+    def is_invalid(self, block_num):
+        return block_num < 0 or block_num > max_block
+
+    def is_reserved(self, block num):
+        # know starting point of data block given inode table and
+        # total number of inodes
+        pass
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         sys.stderr.write("Invalid number of arguments!\nUsage: ./lab3b [csv]\n")
