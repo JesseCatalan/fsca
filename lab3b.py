@@ -38,6 +38,16 @@ class BlockAudit:
                     'offset': tokenized[3]
                 }
             if tokenized[0] == 'INODE':
+                inode_blocks = tokenized[12:]
+                for i_block in inode_blocks:
+                    self.blocks[i_block] = {
+                        'block_level': 1,
+                        'inode_num': tokenized[1],
+                        'offset': i_block * 512
+                    }
+            if tokenized[0] == 'BFREE':
+                pass
+            if tokenized[1] == 'IFREE':
                 pass
 
     def is_invalid(self, block_num):
