@@ -13,37 +13,41 @@ class FileSystemInfo:
 
     def get_max_block(self):
         superblock = filter(lambda line: line.startswith("SUPERBLOCK"), fs_summary)[0]
-        max_block = superblock.split(',')[1] 
+        max_block = int(superblock.split(',')[1])
         return max_block
 
 class BlockAudit:
-    def __init__(self, max_block, fs_summary):
-        self.max_block = max_block
+    def __init__(self, fs_summary):
         self.blocks = {}
-        self.level_name_by_num = {
-            0: '',
-            1: 'INDIRECT',
-            2: 'DOUBLE INDIRECT',
-            3: 'TRIPLE INDIRECT'
+        self.block_type_by_level = {
+            0: 'BLOCK',
+            1: 'INDIRECT BLOCK',
+            2: 'DOUBLE INDIRECT BLOCK',
+            3: 'TRIPLE INDIRECT BLOCK'
         }
+
+        self.fs_summary = fs_summary
+        fsi = FileSystemInfo(self.fs_summary)
+        self.max_block = fsi.get_max_block()
 
     def parse_blocks(self):
         for entry in fs_summary:
             tokenized = entry.split(',')
             if tokenized[0] == 'INDIRECT':
-                block_num = tokenized[5]
+                block_num = int(tokenized[5])
                 self.blocks[block_num] = {
-                    'block_level': tokenized[2],
-                    'inode_num': tokenized[1],
-                    'offset': tokenized[3]
+                    'block_level': int(tokenized[2]),
+                    'inode_num': int(tokenized[1]),
+                    'offset': int(tokenized[3])
                 }
             if tokenized[0] == 'INODE':
                 inode_blocks = tokenized[12:]
                 for i_block in inode_blocks:
-                    self.blocks[i_block] = {
+                    block_num = int(i_block)
+                    self.blocks[block_num] = {
                         'block_level': 1,
-                        'inode_num': tokenized[1],
-                        'offset': i_block * 512
+                        'inode_num': int(tokenized[1]),
+                        'offset': (block_num * 512)
                     }
             if tokenized[0] == 'BFREE':
                 pass
@@ -51,24 +55,27 @@ class BlockAudit:
                 pass
 
     def is_invalid(self, block_num):
-        return block_num < 0 or block_num > max_block
+        return block_num < 0 or block_num > self.max_block
 
-    def is_reserved(self, block num):
-        # know starting point of data block given inode table and
-        # total number of inodes
-        pass
+    def is_reserved(self, block_num):
+        # TODO: Implement.
+        # We know starting point of data block given inode table and
+        # total number of inodes.
+        return 0
 
     def audit(self):
-        for block_id, block_stats in self.blocks.items():
-            level = self.level_name_by_num[block_stats['block_level']]
-            if is_invalid(block_id):
+        for block_num, block_stats in self.blocks.items():
+            block_type = self.block_type_by_level[block_stats['block_level']]
+            err_type = None
+            if self.is_invalid(block_num):
                 err_type = 'INVALID'
-            if is_reserved(block_id):
+            if self.is_reserved(block_num):
                 err_type = 'RESERVED'
 
-            print("%s BLOCK %s IN INODE %s AT OFFSET %s"
-                    % (err_type, block_num, block_stats['inode_num'],
-                        int(block_stats['offset'])))
+            if err_type is not None:
+                print("%s %s %s IN INODE %s AT OFFSET %s"
+                        % (err_type, block_type, block_num, block_stats['inode_num'],
+                            block_stats['offset']))
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
@@ -80,7 +87,8 @@ if __name__ == "__main__":
     fs_summary = f.readlines()
     f.close()
 
-    fsi = FileSystemInfo(fs_summary)
-    max_block = fsi.get_max_block()
+    ba = BlockAudit(fs_summary)
+    ba.parse_blocks()
+    ba.audit()
 
     exit(0)
