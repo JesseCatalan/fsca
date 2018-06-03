@@ -17,7 +17,10 @@ class FileSystemInfo:
 
 class BlockAudit:
     def __init__(self, fs_summary):
+        # Key: block number, Value: list of blocks with specified block number
+        # Use a list to keep track of duplicates
         self.blocks = {}
+
         self.free_blocks = []
         self.inodes = {}
         self.free_inodes = []
@@ -31,17 +34,30 @@ class BlockAudit:
         fsi = FileSystemInfo(self.fs_summary)
         self.max_block = fsi.get_max_block()
 
+    def add_block(self, block_num, block_level, inode_num, offset):
+        if (block_num == 0):
+            return
+        block = {
+            'block_level': block_level,
+            'inode_num': inode_num,
+            'offset': offset
+        }
+        if block_num in self.blocks.keys():
+            self.blocks[block_num].append(block)
+        else:
+            self.blocks[block_num] = [block];
+
     def parse_blocks(self):
         for entry in fs_summary:
             tokenized = entry.split(',')
-            if tokenized[0] == 'INDIRECT':
+            entry_type = tokenized[0]
+            if entry_type == 'INDIRECT':
                 block_num = int(tokenized[5])
-                self.blocks[block_num] = {
-                    'block_level': int(tokenized[2]),
-                    'inode_num': int(tokenized[1]),
-                    'offset': int(tokenized[3])
-                }
-            if tokenized[0] == 'INODE':
+                level = int(tokenized[2])
+                inode_num = int(tokenized[1])
+                offset = int(tokenized[3])
+                self.add_block(block_num, level, inode_num, offset)
+            if entry_type == 'INODE':
                 inode_num = int(tokenized[1])
                 self.inodes[inode_num] = {
                     'links': int(tokenized[6])
@@ -59,22 +75,19 @@ class BlockAudit:
                         offset = index
                     elif index == 12:
                         level = 1
-                        offset = 13
+                        offset = 12
                     elif index == 13:
                         level = 2
                         offset = 268
                     elif index == 14:
                         level = 3
                         offset = 65804
-                    self.blocks[block_num] = {
-                        'block_level': level,
-                        'inode_num': int(tokenized[1]),
-                        'offset': offset
-                    }
+                    inode_num = int(tokenized[1])
+                    self.add_block(block_num, level, inode_num, offset)
                     index += 1
-            if tokenized[0] == 'BFREE':
+            if entry_type == 'BFREE':
                 self.free_blocks.append(int(tokenized[1]))
-            if tokenized[0] == 'IFREE':
+            if entry_type == 'IFREE':
                 self.free_inodes.append(int(tokenized[1]))
 
     def is_invalid(self, block_num):
@@ -108,19 +121,20 @@ class BlockAudit:
         return is_not_allocated_and_not_free
 
     def audit(self):
-        for block_num, block_stats in self.blocks.items():
-            block_type = self.block_type_by_level[block_stats['block_level']]
-            err_type = None
-            if self.is_invalid(block_num):
-                err_type = 'INVALID'
-            elif self.is_reserved(block_num):
-                err_type = 'RESERVED'
-
-            if err_type is not None:
-                print("%s %s %s IN INODE %s AT OFFSET %s"
-                        % (err_type, block_type, block_num, block_stats['inode_num'],
-                            block_stats['offset']))
-
+        for block_num, matching_blocks in self.blocks.items():
+            for block_stats in matching_blocks:
+                block_type = self.block_type_by_level[block_stats['block_level']]
+                inode_num = block_stats['inode_num']
+                offset = block_stats['offset']
+                if self.is_invalid(block_num):
+                    print("INVALID %s %d IN INODE %d AT OFFSET %d"
+                            % (block_type, block_num, inode_num, offset))
+                if self.is_reserved(block_num):
+                    print("RESERVED %s %d IN INODE %d AT OFFSET %d"
+                            % (block_type, block_num, inode_num, offset))
+                if len(matching_blocks) > 1:
+                    print("DUPLICATE %s %d IN INODE %d AT OFFSET %d"
+                            % (block_type, block_num, inode_num, offset))
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         sys.stderr.write("Invalid number of arguments!\nUsage: ./lab3b [csv]\n")
