@@ -7,11 +7,25 @@ ID: 704827423,204785152
 
 import sys
 
+class FileSystemInfo:
+    def __init__(self, fs_summary):
+        self.fs_summary = fs_summary
+
+    def get_max_block(self):
+        superblock = filter(lambda line: line.startswith("SUPERBLOCK"), fs_summary)[0]
+        max_block = superblock.split(',')[1] 
+        return max_block
 
 class BlockAudit:
     def __init__(self, max_block, fs_summary):
         self.max_block = max_block
         self.blocks = {}
+        self.level_name_by_num = {
+            0: '',
+            1: 'INDIRECT',
+            2: 'DOUBLE INDIRECT',
+            3: 'TRIPLE INDIRECT'
+        }
 
     def parse_blocks(self):
         for entry in fs_summary:
@@ -26,7 +40,6 @@ class BlockAudit:
             if tokenized[0] == 'INODE':
                 pass
 
-
     def is_invalid(self, block_num):
         return block_num < 0 or block_num > max_block
 
@@ -34,6 +47,18 @@ class BlockAudit:
         # know starting point of data block given inode table and
         # total number of inodes
         pass
+
+    def audit(self):
+        for block_id, block_stats in self.blocks.items():
+            level = self.level_name_by_num[block_stats['block_level']]
+            if is_invalid(block_id):
+                err_type = 'INVALID'
+            if is_reserved(block_id):
+                err_type = 'RESERVED'
+
+            print("%s BLOCK %s IN INODE %s AT OFFSET %s"
+                    % (err_type, block_num, block_stats['inode_num'],
+                        int(block_stats['offset'])))
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
@@ -45,13 +70,7 @@ if __name__ == "__main__":
     fs_summary = f.readlines()
     f.close()
 
-    superblock = filter(lambda line: line.startswith("SUPERBLOCK"), fs_summary)
-    indirect_blocks = filter(lambda line: line.startswith("INDIRECT"), fs_summary)
-    inodes = filter(lambda line: line.startswith("INODE"), fs_summary)
-    free_blocks = filter(lambda line: line.startswith("BFREE"), fs_summary)
-    free_inodes = filter(lambda line: line.startswith("IFREE"), fs_summary)
-    dirents = filter(lambda line: line.startswith("DIRENT"), fs_summary)
-    groups = filter(lambda line: line.startswith("GROUP"), fs_summary)
-
+    fsi = FileSystemInfo(fs_summary)
+    max_block = fsi.get_max_block()
 
     exit(0)
