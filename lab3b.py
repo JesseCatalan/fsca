@@ -19,6 +19,7 @@ class BlockAudit:
     def __init__(self, fs_summary):
         self.blocks = {}
         self.free_blocks = []
+        self.inodes = {}
         self.free_inodes = []
         self.block_type_by_level = {
             0: 'BLOCK',
@@ -41,14 +42,34 @@ class BlockAudit:
                     'offset': int(tokenized[3])
                 }
             if tokenized[0] == 'INODE':
+                inode_num = int(tokenized[1])
+                self.inodes[inode_num] = {
+                    'links': int(tokenized[6])
+                }
                 index = 0
+                level = 0
+                offset = 0
                 inode_blocks = tokenized[12:]
                 for i_block in inode_blocks:
                     block_num = int(i_block)
+                    # offsets calculated based on 1 KiB block size
+                    # they can be generalized given the block_size from superblock
+                    if index < 12:
+                        level = 0
+                        offset = index
+                    elif index == 12:
+                        level = 1
+                        offset = 13
+                    elif index == 13:
+                        level = 2
+                        offset = 268
+                    elif index == 14:
+                        level = 3
+                        offset = 65804
                     self.blocks[block_num] = {
-                        'block_level': 0,
+                        'block_level': level,
                         'inode_num': int(tokenized[1]),
-                        'offset': index
+                        'offset': offset
                     }
                     index += 1
             if tokenized[0] == 'BFREE':
@@ -72,12 +93,19 @@ class BlockAudit:
             is_unreferenced = 0
         return is_unreferenced
 
-    def is_allocated_and_free(self, block_num):
+    def is_allocated_and_free(self, inode_num):
         # Note: this function assumes that legal block checking has occurred
         is_allocated_and_free = 0
-        if block_num in self.blocks and block_num in self.free_blocks:
+        if inode_num in self.inodes and inode_num in self.free_inodes:
             is_allocated_and_free = 1
         return is_allocated_and_free
+
+    def is_not_allocated_and_not_free(self, inode_num):
+        # Note: this function assumes that legal block checking has occurred
+        is_not_allocated_and_not_free = 0
+        if inode_num not in self.inodes and inode_num not in self.free_inodes:
+            is_not_allocated_and_not_free = 1
+        return is_not_allocated_and_not_free
 
     def audit(self):
         for block_num, block_stats in self.blocks.items():
