@@ -45,7 +45,7 @@ class BlockAudit:
                 for i_block in inode_blocks:
                     block_num = int(i_block)
                     self.blocks[block_num] = {
-                        'block_level': 1,
+                        'block_level': 0,
                         'inode_num': int(tokenized[1]),
                         'offset': (block_num * 512)
                     }
