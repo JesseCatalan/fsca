@@ -5,15 +5,33 @@ EMAIL: rkuchimpos@gmail.com,jessecatalan77@gmail.com
 ID: 704827423,204785152
 """
 import sys
+import math
 
 class FileSystemInfo:
     def __init__(self, fs_summary):
-        self.fs_summary = fs_summary
+        fs_summary = fs_summary
+        superblock = filter(lambda line: line.startswith("SUPERBLOCK"), fs_summary)[0]
+        superblock_tokens = superblock.split(',')
+        self.max_block = int(superblock_tokens[1])
+        self.block_size = int(superblock_tokens[3])
+        
+        group_summary = filter(lambda line: line.startswith("GROUP"), fs_summary)[0]
+        group_summary_tokens = group_summary.split(',')
+        first_inode = int(group_summary_tokens[8])
+        inode_size = int(superblock_tokens[4])
+        num_inodes_in_group = int(group_summary_tokens[3])
+        self.first_data_block = first_inode + int(math.ceil(1.0 * num_inodes_in_group * inode_size / self.block_size))
 
     def get_max_block(self):
-        superblock = filter(lambda line: line.startswith("SUPERBLOCK"), fs_summary)[0]
-        max_block = int(superblock.split(',')[1])
-        return max_block
+        return self.max_block
+
+    def get_block_size(self):
+        return self.block_size
+
+    # Note: Assume that the file system has only a single block group
+    def get_first_data_block(self):
+        return self.first_data_block
+
 
 class BlockAudit:
     def __init__(self, fs_summary):
@@ -33,6 +51,9 @@ class BlockAudit:
         self.fs_summary = fs_summary
         fsi = FileSystemInfo(self.fs_summary)
         self.max_block = fsi.get_max_block()
+        self.block_size = fsi.get_block_size()
+        self.first_data_block = fsi.get_first_data_block()
+        self.pointers_per_block = self.block_size / 4;
 
     def add_block(self, block_num, block_level, inode_num, offset):
         if (block_num == 0):
@@ -78,10 +99,10 @@ class BlockAudit:
                         offset = 12
                     elif index == 13:
                         level = 2
-                        offset = 268
+                        offset = 12 + self.pointers_per_block
                     elif index == 14:
                         level = 3
-                        offset = 65804
+                        offset = 12 + self.pointers_per_block + self.pointers_per_block ** 2
                     inode_num = int(tokenized[1])
                     self.add_block(block_num, level, inode_num, offset)
                     index += 1
@@ -94,10 +115,7 @@ class BlockAudit:
         return block_num < 0 or block_num > self.max_block
 
     def is_reserved(self, block_num):
-        # TODO: Implement.
-        # We know starting point of data block given inode table and
-        # total number of inodes.
-        return 0
+        return block_num < self.first_data_block
     
     def is_unreferenced(self, block_num):
         # Note: this function assumes that legal block checking has occurred
