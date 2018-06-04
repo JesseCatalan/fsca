@@ -48,6 +48,8 @@ class Auditor:
         self.free_blocks = []
         self.inodes = {}
         self.free_inodes = []
+        self.dirents = {}
+        self.parent_dir = {}
         self.block_type_by_level = {
             0: 'BLOCK',
             1: 'INDIRECT BLOCK',
@@ -74,7 +76,19 @@ class Auditor:
         if block_num in self.blocks.keys():
             self.blocks[block_num].append(block)
         else:
-            self.blocks[block_num] = [block];
+            self.blocks[block_num] = [block]
+
+    def add_dirent(self, parent_inode_num, file_inode_num, filename):
+        dirent = {
+            'file_inode_num': file_inode_num,
+            'filename': filename
+        }
+        if filename != "'.'" and filename != "'..'":
+            self.parent_dir[file_inode_num] = parent_inode_num
+        if parent_inode_num in self.dirents.keys():
+            self.dirents[parent_inode_num].append(dirent)
+        else:
+            self.dirents[parent_inode_num] = [dirent]
 
     def parse_blocks(self):
         for entry in fs_summary:
@@ -116,6 +130,12 @@ class Auditor:
                 self.free_blocks.append(int(tokenized[1]))
             if entry_type == 'IFREE':
                 self.free_inodes.append(int(tokenized[1]))
+            if entry_type == 'DIRENT':
+                parent_inode_num = int(tokenized[1])
+                file_inode_num = int(tokenized[3])
+                filename = tokenized[6][:-1]
+                self.add_dirent(parent_inode_num, file_inode_num, filename)
+
 
     def is_invalid(self, block_num):
         return block_num < 0 or block_num > self.max_block
@@ -162,7 +182,25 @@ class Auditor:
                 print("ALLOCATED INODE %d ON FREELIST" % (inode_num))
             if self.inode_is_not_allocated_and_not_free(inode_num):
                 print("UNALLOCATED INODE %d NOT ON FREELIST" % (inode_num))
-                
+        for parent_inode_num, dirents in self.dirents.items():
+            for dirent in dirents:
+                file_inode_num = dirent['file_inode_num']
+                filename = dirent['filename']
+                if file_inode_num < 1 or file_inode_num > self.max_inode:
+                    print("DIRECTORY INODE %d NAME %s INVALID INODE %d" %
+                            (parent_inode_num, filename, file_inode_num))
+                elif file_inode_num not in self.inodes.keys():
+                    print("DIRECTORY INODE %d NAME %s UNALLOCATED INODE %d" %
+                            (parent_inode_num, filename, file_inode_num))
+                if filename == "'.'":
+                    if file_inode_num != parent_inode_num:
+                        print("DIRECTORY INODE %d NAME %s LINK TO INODE %d SHOULD BE %d"
+                                % (parent_inode_num, filename, file_inode_num, parent_inode_num))
+                if filename == "'..'":
+                    parent_dir = 2 if parent_inode_num == 2 else self.parent_dir[parent_inode_num]
+                    if parent_dir != file_inode_num:
+                        print("DIRECTORY INODE %d NAME %s LINK TO INODE %d SHOULD BE %d"
+                                % (parent_inode_num, filename, file_inode_num, parent_dir))
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         sys.stderr.write("Invalid number of arguments.\nUsage: ./lab3b [csv]\n")
@@ -181,6 +219,8 @@ if __name__ == "__main__":
     a = Auditor(fs_summary)
     a.parse_blocks()
     a.audit()
+
+    # TODO: Exit with error code 2 if inconsistencies are found
 
     exit(0)
 
