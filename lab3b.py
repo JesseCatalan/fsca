@@ -39,7 +39,7 @@ class FileSystemInfo:
     def get_inodes_in_group(self):
         return self.num_inodes_in_group
 
-class BlockAudit:
+class Auditor:
     def __init__(self, fs_summary):
         # Key: block number, Value: list of blocks with specified block number
         # Use a list to keep track of duplicates
@@ -97,8 +97,6 @@ class BlockAudit:
                 inode_blocks = tokenized[12:]
                 for i_block in inode_blocks:
                     block_num = int(i_block)
-                    # offsets calculated based on 1 KiB block size
-                    # they can be generalized given the block_size from superblock
                     if index < 12:
                         level = 0
                         offset = index
@@ -167,17 +165,22 @@ class BlockAudit:
                 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        sys.stderr.write("Invalid number of arguments!\nUsage: ./lab3b [csv]\n")
+        sys.stderr.write("Invalid number of arguments.\nUsage: ./lab3b [csv]\n")
         exit(1)
 
     filename = sys.argv[1]
-    f = open(filename, 'r')
+    try:
+        f = open(filename, 'r')
+    except IOError:
+        sys.stderr.write("Error. Unable to open file \"%s\".\n" % (filename))
+        exit(1)
+
     fs_summary = f.readlines()
     f.close()
 
-    ba = BlockAudit(fs_summary)
-    ba.parse_blocks()
-    ba.audit()
+    a = Auditor(fs_summary)
+    a.parse_blocks()
+    a.audit()
 
     exit(0)
 
