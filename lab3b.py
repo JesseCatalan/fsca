@@ -14,13 +14,14 @@ class FileSystemInfo:
         superblock_tokens = superblock.split(',')
         self.max_block = int(superblock_tokens[1])
         self.block_size = int(superblock_tokens[3])
+        self.first_unreserved_inode = int(superblock_tokens[7])
         
         group_summary = filter(lambda line: line.startswith("GROUP"), fs_summary)[0]
         group_summary_tokens = group_summary.split(',')
         first_inode = int(group_summary_tokens[8])
         inode_size = int(superblock_tokens[4])
-        num_inodes_in_group = int(group_summary_tokens[3])
-        self.first_data_block = first_inode + int(math.ceil(1.0 * num_inodes_in_group * inode_size / self.block_size))
+        self.num_inodes_in_group = int(group_summary_tokens[3])
+        self.first_data_block = first_inode + int(math.ceil(1.0 * self.num_inodes_in_group * inode_size / self.block_size))
 
     def get_max_block(self):
         return self.max_block
@@ -32,6 +33,11 @@ class FileSystemInfo:
     def get_first_data_block(self):
         return self.first_data_block
 
+    def get_first_unreserved_inode(self):
+        return self.first_unreserved_inode
+
+    def get_inodes_in_group(self):
+        return self.num_inodes_in_group
 
 class BlockAudit:
     def __init__(self, fs_summary):
@@ -54,6 +60,8 @@ class BlockAudit:
         self.block_size = fsi.get_block_size()
         self.first_data_block = fsi.get_first_data_block()
         self.pointers_per_block = self.block_size / 4;
+        self.first_unreserved_inode = fsi.get_first_unreserved_inode()
+        self.max_inode = fsi.get_inodes_in_group()
 
     def add_block(self, block_num, block_level, inode_num, offset):
         if (block_num == 0):
@@ -118,25 +126,16 @@ class BlockAudit:
         return block_num < self.first_data_block
     
     def is_unreferenced(self, block_num):
-        # Note: this function assumes that legal block checking has occurred
-        is_unreferenced = 1
-        if block_num in self.blocks or block_num in self.free_blocks:
-            is_unreferenced = 0
-        return is_unreferenced
+        return not (block_num in self.blocks or (block_num in self.free_blocks and len(self.blocks) != 1))
 
-    def is_allocated_and_free(self, inode_num):
-        # Note: this function assumes that legal block checking has occurred
-        is_allocated_and_free = 0
-        if inode_num in self.inodes and inode_num in self.free_inodes:
-            is_allocated_and_free = 1
-        return is_allocated_and_free
+    def block_is_allocated_and_free(self, block_num):
+        return block_num in self.blocks and block_num in self.free_blocks
 
-    def is_not_allocated_and_not_free(self, inode_num):
-        # Note: this function assumes that legal block checking has occurred
-        is_not_allocated_and_not_free = 0
-        if inode_num not in self.inodes and inode_num not in self.free_inodes:
-            is_not_allocated_and_not_free = 1
-        return is_not_allocated_and_not_free
+    def inode_is_allocated_and_free(self, inode_num):
+        return inode_num in self.inodes and inode_num in self.free_inodes
+
+    def inode_is_not_allocated_and_not_free(self, inode_num):
+        return inode_num not in self.inodes and inode_num not in self.free_inodes
 
     def audit(self):
         for block_num, matching_blocks in self.blocks.items():
@@ -153,6 +152,19 @@ class BlockAudit:
                 if len(matching_blocks) > 1:
                     print("DUPLICATE %s %d IN INODE %d AT OFFSET %d"
                             % (block_type, block_num, inode_num, offset))
+                if self.block_is_allocated_and_free(block_num):
+                    print("ALLOCATED BLOCK %d ON FREELIST" % (block_num))
+        for block_num in range(self.first_data_block, self.max_block):
+            if self.is_unreferenced(block_num):
+                print ("UNREFERENCED BLOCK %d" % (block_num))
+        for inode_num in range(1, self.max_inode):
+            if inode_num < self.first_unreserved_inode and inode_num != 2:
+                continue
+            if self.inode_is_allocated_and_free(inode_num):
+                print("ALLOCATED INODE %d ON FREELIST" % (inode_num))
+            if self.inode_is_not_allocated_and_not_free(inode_num):
+                print("UNALLOCATED INODE %d NOT ON FREELIST" % (inode_num))
+                
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         sys.stderr.write("Invalid number of arguments!\nUsage: ./lab3b [csv]\n")
