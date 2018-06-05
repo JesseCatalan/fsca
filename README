@@ -2,10 +2,18 @@ NAME: Ricardo Kuchimpos,Jesse Catalan
 EMAIL: rkuchimpos@gmail.com,jessecatalan77@gmail.com
 ID: 704827423,204785152
 
---------
-Sources
---------
+------------------------------
+Description of Included Files
+------------------------------
+Makefile: Rules to create symlink to Python script, clean generated files, and
+          create a tarball
+lab3b.py: Python script to conduct file system consistency analysis
+lab3b: Symlink to the Python script lab3b.py
+README: Description of included files and sources used to complete the project
 
+------------------------------
+Sources
+------------------------------
 https://docs.python.org/2/library/sys.html#sys.exit
 http://www.pythonforbeginners.com/system/python-sys-argv
 https://www.programcreek.com/python/example/56344/sys.stderr.write
@@ -25,3 +33,4 @@ https://docs.python.org/2/library/math.html
 https://www.geeksforgeeks.org/try-except-python/
 https://www.dotnetperls.com/slice-python
 https://www.geeksforgeeks.org/ternary-operator-in-python/
+http://www.nongnu.org/ext2-doc/ext2.html
