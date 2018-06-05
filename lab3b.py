@@ -44,12 +44,12 @@ class Auditor:
         # Key: block number, Value: list of blocks with specified block number
         # Use a list to keep track of duplicates
         self.blocks = {}
-
         self.free_blocks = []
         self.inodes = {}
         self.free_inodes = []
         self.dirents = {}
         self.parent_dir = {}
+        self.references = {}
         self.block_type_by_level = {
             0: 'BLOCK',
             1: 'INDIRECT BLOCK',
@@ -90,7 +90,12 @@ class Auditor:
         else:
             self.dirents[parent_inode_num] = [dirent]
 
+    def initialize_references(self):
+        for inode_num in range (1, self.max_inode + 1):
+            self.references[inode_num] = 0
+
     def parse_blocks(self):
+        self.initialize_references()
         for entry in fs_summary:
             tokenized = entry.split(',')
             entry_type = tokenized[0]
@@ -135,7 +140,8 @@ class Auditor:
                 file_inode_num = int(tokenized[3])
                 filename = tokenized[6][:-1]
                 self.add_dirent(parent_inode_num, file_inode_num, filename)
-
+                if not ((file_inode_num < 0) or (file_inode_num > self.max_inode)):
+                    self.references[file_inode_num] += 1
 
     def is_invalid(self, block_num):
         return block_num < 0 or block_num > self.max_block
@@ -154,6 +160,9 @@ class Auditor:
 
     def inode_is_not_allocated_and_not_free(self, inode_num):
         return inode_num not in self.inodes and inode_num not in self.free_inodes
+
+    def references_not_equal_links(self, inode_num):
+        return self.references[inode_num] != self.inodes[inode_num]['links']
 
     def audit(self):
         for block_num, matching_blocks in self.blocks.items():
@@ -182,6 +191,9 @@ class Auditor:
                 print("ALLOCATED INODE %d ON FREELIST" % (inode_num))
             if self.inode_is_not_allocated_and_not_free(inode_num):
                 print("UNALLOCATED INODE %d NOT ON FREELIST" % (inode_num))
+        for inode_num in self.inodes:
+            if self.references_not_equal_links(inode_num):
+                print("INODE %d HAS %d LINKS BUT LINKCOUNT IS %d" % (inode_num, self.references[inode_num], self.inodes[inode_num]['links']))
         for parent_inode_num, dirents in self.dirents.items():
             for dirent in dirents:
                 file_inode_num = dirent['file_inode_num']
